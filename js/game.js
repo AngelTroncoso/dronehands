@@ -133,16 +133,38 @@ function setGameState(s) {
 }
 function setStatus(t) { $("#load-status").textContent = t; }
 
+let announceTimer = 0;
+function announce(text, cls, dur) {
+  const el = $("#announce");
+  el.textContent = text;
+  el.className = "announce show " + (cls || "");
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => { el.className = "announce"; }, dur || 1200);
+}
+
 function updateHud() {
   $("#hud-score").textContent = app.score;
   $("#hud-best").textContent = app.best;
   const kmh = Math.round(60 + drone.spd * 2.4 + drone.turbo * 160);
   $("#hud-speed").textContent = kmh + " km/h";
-  $("#hud-alt").textContent = Math.round((1 - drone.y / Math.max(1, world.H)) * 400) + " m";
+  $("#hud-speed-bar").style.width = (clamp((drone.spd - 40) / 520, 0, 1) * 100) + "%";
+  const altPct = clamp(1 - drone.y / Math.max(1, world.H), 0, 1);
+  $("#hud-alt").textContent = Math.round(altPct * 400) + " m";
+  $("#hud-alt-bar").style.height = (altPct * 100) + "%";
+  if (!app.recordHit && app.best > 0 && app.score > app.best) {
+    app.recordHit = true;
+    announce("🏆 ¡NUEVO RÉCORD!", "record", 1800);
+    $("#hud-score").classList.add("flash-record");
+  }
   const comboEl = $("#hud-combo");
-  if (app.combo > 1) { comboEl.textContent = "x" + app.combo; comboEl.classList.remove("hidden"); }
-  else comboEl.classList.add("hidden");
-  $("#hud-lives").textContent = "🔋".repeat(app.lives) + "▫".repeat(Math.max(0, 3 - app.lives));
+  if (app.combo > 1) {
+    comboEl.classList.remove("hidden");
+    $("#hud-combo-text").textContent = "x" + app.combo;
+    $("#hud-combo-bar").style.width = clamp(app.comboTimer / 4, 0, 1) * 100 + "%";
+  } else comboEl.classList.add("hidden");
+  const segs = document.querySelectorAll("#hud-hull .seg");
+  for (let i = 0; i < segs.length; i++) segs[i].classList.toggle("lost", i >= app.lives);
+  document.getElementById("hud-hull").classList.toggle("low", app.lives === 1);
 }
 
 function updateGesturePanel() {
@@ -155,7 +177,13 @@ function updateGesturePanel() {
   $("#g-right-status").textContent = R.present ? (R.pinch > .5 ? "TURBO " + R.dir.toFixed(2) : "dir " + R.dir.toFixed(2)) : "sin mano";
   $("#g-right").classList.toggle("active", R.present);
   $("#g-fps").textContent = Math.round(fps.v) + " fps · " + hands.backend;
-  $("#g-hands").textContent = (L.present ? 1 : 0) + (R.present ? 1 : 0) + "/2 manos";
+  const nHands = (L.present ? 1 : 0) + (R.present ? 1 : 0);
+  $("#g-hands").textContent = nHands + "/2 manos";
+  const wrap = document.getElementById("cam-wrap");
+  wrap.classList.toggle("hands-0", nHands === 0);
+  wrap.classList.toggle("hands-1", nHands === 1);
+  wrap.classList.toggle("hands-2", nHands === 2);
+  document.getElementById("cam-check").textContent = nHands === 2 ? "✓ 2/2 manos" : (nHands === 1 ? "1/2 mano" : "0/2 manos");
 }
 /* =========================================================
    Flujos de partida
@@ -169,6 +197,11 @@ function resetRun() {
   app.invuln = 1.2;
   app.countT = 3.2;
   app.pinchHold = 0;
+  app.recordHit = false;
+  app.lastTurbo = false;
+  app.lastCount = 0;
+  $("#hud-score").classList.remove("flash-record");
+  $("#go-retry-fill").style.width = "0%";
   drone.x = Math.max(170, world.W * 0.24);
   drone.y = world.H / 2;
   drone.vx = 0;
@@ -203,6 +236,7 @@ function loseLife(reason) {
   app.combo = 1;
   sfx.crash();
   world.burst(drone.x, drone.y, "#ff4d6d", 30, 5);
+  announce("💥 ¡IMPACTO!", "danger", 900);
   updateHud();
   app.invuln = 1.4;
   if (app.lives <= 0) gameOver();
@@ -215,7 +249,9 @@ function gameOver() {
   app.pinchHold = 0;
   const isNew = app.score > app.best;
   if (isNew) { app.best = app.score; localStorage.setItem(BEST_KEY, String(app.best)); }
-  $("#go-score").textContent = app.score;
+  const goTarget = app.score; const goEl = $("#go-score"); const goT0 = performance.now();
+  const goTick = () => { const p = Math.min(1, (performance.now() - goT0) / 1200); goEl.textContent = Math.round(goTarget * p * (2 - p)); if (p < 1) requestAnimationFrame(goTick); };
+  goTick();
   $("#go-gates").textContent = app.gates;
   $("#go-best").textContent = app.best;
   $("#go-newbest").classList.toggle("hidden", !isNew);
@@ -274,7 +310,9 @@ function readControls(dt) {
   drone.x = clamp(drone.x + (drone.vx + Math.max(0, dir) * 40) * dt, world.W * 0.1, world.W * 0.55);
 
   /* Turbo */
+  const wasTurbo = drone.turbo > 0.5;
   drone.turbo = lerp(drone.turbo, turbo, 1 - Math.pow(0.05, dt));
+  if (drone.turbo > 0.5 && !wasTurbo && app.state === S.PLAY) announce("⚡ TURBO ×2", "turbo", 900);
   drone.tilt = lerp(drone.tilt, (Math.abs(dir) > Math.abs(side) ? dir : side), 1 - Math.pow(0.05, dt));
   drone.rot = clamp(-drone.alt * .5 + -drone.tilt * .35, -.6, .6);
 
@@ -300,6 +338,7 @@ function scoring(dt) {
         app.score += base;
         app.combo = Math.min(5, app.combo + 1);
         app.comboTimer = 4;
+        if (app.combo >= 2) announce("¡COMBO x" + app.combo + "!", "", 900);
         sfx.blip(520 + app.combo * 60, 980, .1);
         world.burst(g.x, g.gapY, "#00e5ff", 14, 3);
         world.setDifficulty(app.score / 600);
@@ -474,6 +513,8 @@ function frame(now) {
   /* Estados */
   if (app.state === S.CALIB) {
     app.countT -= dt;
+    const cDigit = Math.ceil(app.countT);
+    if (app.lastCount !== cDigit && cDigit >= 1 && cDigit <= 3) { app.lastCount = cDigit; sfx.blip(340, 340, .07, "sine", .12); }
     readControls(dt);
     world.update(dt * 120, drone);
     if (app.countT <= 0) finishCalibration();
@@ -505,8 +546,8 @@ function frame(now) {
     if (hands.right.present && hands.right.pinch > 0.55) {
       app.pinchHold += dt;
       if (app.pinchHold > 1.5) { app.pinchHold = 0; startCalibration(); }
-    } else app.pinchHold = 0;
-    $("#go-pinch-progress").textContent = "◆".repeat(Math.min(6, Math.round(app.pinchHold * 4))) + "◇".repeat(Math.max(0, 6 - Math.round(app.pinchHold * 4)));
+    } else { app.pinchHold = 0; $("#go-retry-fill").style.width = "0%"; }
+    $("#go-retry-fill").style.width = Math.min(100, (app.pinchHold / 1.5) * 100) + "%";
   }
 
   if (app.state === S.PLAY || app.state === S.CALIB) updateHud();

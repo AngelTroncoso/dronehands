@@ -13,19 +13,44 @@
   <canvas id="game"></canvas>
   <div id="vignette"></div>
 
-  <!-- HUD superior -->
+  <!-- Banda central de anuncios -->
+  <div id="announce" class="announce"></div>
+
+  <!-- HUD de cabina -->
   <header id="hud" class="hidden">
     <div class="hud-group">
-      <div class="hud-box"><span class="hud-label">PUNTOS</span><span id="hud-score" class="hud-value accent">0</span></div>
-      <div class="hud-box"><span class="hud-label">RÉCORD</span><span id="hud-best" class="hud-value">0</span></div>
-      <div class="hud-box"><span class="hud-label">VELOCIDAD</span><span id="hud-speed" class="hud-value">0 km/h</span></div>
-      <div class="hud-box"><span class="hud-label">ALTITUD</span><span id="hud-alt" class="hud-value">0 m</span></div>
-      <div id="hud-combo" class="hud-combo hidden">x1</div>
+      <div class="hud-box score-box">
+        <span class="hud-label">PUNTOS</span>
+        <span id="hud-score" class="hud-value accent">0</span>
+      </div>
+      <div class="hud-box">
+        <span class="hud-label">RÉCORD</span>
+        <span id="hud-best" class="hud-value">0</span>
+      </div>
+      <div class="hud-box meter-box">
+        <span class="hud-label">VELOCIDAD</span>
+        <div class="meter"><div id="hud-speed-bar" class="meter-fill speed" style="width:0%"></div></div>
+        <span id="hud-speed" class="hud-value small">60 km/h</span>
+      </div>
+      <div class="hud-box meter-box">
+        <span class="hud-label">ALTITUD</span>
+        <div class="meter vertical"><div id="hud-alt-bar" class="meter-fill alt" style="height:50%"></div></div>
+        <span id="hud-alt" class="hud-value small">200 m</span>
+      </div>
+      <div id="hud-combo" class="hud-combo hidden">
+        <span id="hud-combo-text">x2</span>
+        <div class="combo-bar"><div id="hud-combo-bar"></div></div>
+      </div>
     </div>
     <div class="hud-group">
-      <div id="hud-lives" class="hud-lives" title="Integridad del casco">🔋🔋🔋</div>
+      <div class="hud-box hull-box">
+        <span class="hud-label">CASCO</span>
+        <div id="hud-hull" class="hull">
+          <span class="seg"></span><span class="seg"></span><span class="seg"></span>
+        </div>
+      </div>
       <button id="btn-mute" class="hud-btn" title="Silenciar">🔊</button>
-      <button id="btn-pause" class="hud-btn">⏸ Pausa <small>(P)</small></button>
+      <button id="btn-pause" class="hud-btn">⏸ <small>(P)</small></button>
     </div>
   </header>
 
@@ -52,7 +77,8 @@
   <div id="cam-wrap" class="hidden">
     <video id="cam" playsinline muted></video>
     <canvas id="cam-overlay"></canvas>
-    <div class="cam-label">CÁMARA · MediaPipe Hand Landmarker · 2 manos</div>
+    <div id="cam-check" class="cam-check">— manos</div>
+    <div class="cam-label">CÁMARA · MediaPipe · 2 manos</div>
   </div>
 
   <!-- Pantallas -->
@@ -66,25 +92,33 @@
 
     <div id="scr-start" class="panel hidden">
       <h1 class="title">DRONE<span>HANDS</span></h1>
-      <p class="subtitle">Prototipo de control gestual «estilo dron» con dos manos · MediaPipe Hand Landmarker</p>
+      <p class="subtitle">Prototipo de control gestual «estilo dron» · MediaPipe Hand Landmarker · 2 manos</p>
       <div class="controls-help">
         <div class="help-card">
           <h3>✋ Mano izquierda</h3>
-          <p><b>Altitud:</b> sube y baja la muñeca para elevar o descender el dron.</p>
-          <p><b>Puño cerrado:</b> bloquea la altitud (hover).</p>
+          <div class="gesture-demo">
+            <span class="hand-icon">✋</span>
+            <span class="demo-arrows vertical"><span class="arr up">↑</span><span class="zone">ALTITUD</span><span class="arr down">↓</span></span>
+          </div>
+          <p>Mueve la <b>muñeca</b> arriba y abajo para subir o bajar.</p>
+          <p><b>Puño cerrado</b> = hover.</p>
         </div>
         <div class="help-card">
           <h3>🫱 Mano derecha</h3>
-          <p><b>Dirección:</b> apunta los dedos a la derecha para acelerar; hacia arriba = hover; hacia la izquierda = retroceso.</p>
-          <p><b>Palma vertical:</b> gírala como un manillar para desplazarte lateralmente.</p>
-          <p><b>Pinza (índice+pulgar):</b> TURBO · puntos x2.</p>
+          <div class="gesture-demo">
+            <span class="hand-icon">🫱</span>
+            <span class="demo-arrows"><span class="arr back">⟵</span><span class="zone">MORRO</span><span class="arr fwd">⟶</span></span>
+            <span class="turbo-tag">🤏 TURBO ×2</span>
+          </div>
+          <p><b>Índice</b> apuntando a la derecha = acelerar; arriba = crucero; izquierda = retroceso.</p>
+          <p>Gira la <b>palma</b> (manillar) para desplazarte.</p>
         </div>
       </div>
       <div class="options">
-        <div class="segmented" id="diff-seg">
-          <button data-diff="easy">Fácil</button>
-          <button data-diff="normal" class="active">Normal</button>
-          <button data-diff="hard">Difícil</button>
+        <div class="diff-cards" id="diff-seg">
+          <button class="diff-card" data-diff="easy"><span class="dc-icon">🌤</span><b>Fácil</b><small>huecos anchos</small></button>
+          <button class="diff-card active" data-diff="normal"><span class="dc-icon">🚀</span><b>Normal</b><small>equilibrado</small></button>
+          <button class="diff-card" data-diff="hard"><span class="dc-icon">☄️</span><b>Difícil</b><small>rápido y estrecho</small></button>
         </div>
         <label class="checkbox"><input type="checkbox" id="opt-invert" /> Intercambiar manos L/R</label>
       </div>
@@ -117,7 +151,8 @@
         <div><span class="hud-label">RÉCORD</span><span id="go-best" class="big">0</span></div>
       </div>
       <p id="go-newbest" class="newbest hidden">🏆 ¡NUEVO RÉCORD!</p>
-      <p class="tip">Mantén la <b>pinza derecha</b> cerrada 1,5 s para reiniciar… <span id="go-pinch-progress">◦◦◦</span></p>
+      <p class="tip">Mantén la <b>pinza derecha</b> cerrada 1,5 s para reiniciar…</p>
+      <div class="retry-bar"><div id="go-retry-fill"></div></div>
       <button id="btn-retry" class="btn-primary">↻ Reintentar</button>
     </div>
   </section>
