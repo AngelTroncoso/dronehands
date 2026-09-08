@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DRONE HANDS · Prototipo IoT de control gestual con MediaPipe</title>
+  <meta name="description" content="Videojuego inmersivo controlado con las dos manos usando MediaPipe Hand Landmarker (num_hands=2). Prototipo IoT listo para desplegar en Vercel." />
+  <meta name="theme-color" content="#05070f" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛸</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+
+  <!-- HUD superior -->
+  <header id="hud" class="hidden">
+    <div class="hud-group">
+      <div class="hud-box"><span class="hud-label">PUNTOS</span><span id="hud-score" class="hud-value accent">0</span></div>
+      <div class="hud-box"><span class="hud-label">RÉCORD</span><span id="hud-best" class="hud-value">0</span></div>
+      <div class="hud-box"><span class="hud-label">VELOCIDAD</span><span id="hud-speed" class="hud-value">0 km/h</span></div>
+      <div class="hud-box"><span class="hud-label">ALTITUD</span><span id="hud-alt" class="hud-value">0 m</span></div>
+      <div id="hud-combo" class="hud-combo hidden">x1</div>
+    </div>
+    <div class="hud-group">
+      <div id="hud-lives" class="hud-lives" title="Integridad del casco">🔋🔋🔋</div>
+      <button id="btn-mute" class="hud-btn" title="Silenciar">🔊</button>
+      <button id="btn-pause" class="hud-btn">⏸ Pausa <small>(P)</small></button>
+    </div>
+  </header>
+
+  <!-- Panel de gestos -->
+  <div id="gesture-panel" class="hidden">
+    <div class="g-card" id="g-left">
+      <div class="g-title">✋ IZQUIERDA · ALTITUD</div>
+      <div class="g-track vertical"><div id="g-left-bar" class="g-fill"></div></div>
+      <div class="g-status" id="g-left-status">sin mano</div>
+    </div>
+    <div class="g-card" id="g-right">
+      <div class="g-title">🫱 DERECHA · DIRECCIÓN</div>
+      <div class="g-track"><div id="g-right-bar" class="g-fill"></div></div>
+      <div class="g-status" id="g-right-status">sin mano</div>
+    </div>
+    <div class="g-card g-fps">
+      <span id="g-fps">— fps</span>
+      <span id="g-hands">0/2 manos</span>
+      <span id="g-backend"></span>
+    </div>
+  </div>
+
+  <!-- Webcam -->
+  <div id="cam-wrap" class="hidden">
+    <video id="cam" playsinline muted></video>
+    <canvas id="cam-overlay"></canvas>
+    <div class="cam-label">CÁMARA · MediaPipe Hand Landmarker · 2 manos</div>
+  </div>
+
+  <!-- Pantallas -->
+  <section id="screen">
+    <div id="scr-loading" class="panel hidden">
+      <div class="spinner"></div>
+      <h2>Iniciando prototipo IoT…</h2>
+      <p id="load-status">Preparando MediaPipe…</p>
+      <p class="note">La cámara y la IA se ejecutan 100% en tu navegador. Ningún vídeo sale de tu dispositivo.</p>
+    </div>
+
+    <div id="scr-start" class="panel hidden">
+      <h1 class="title">DRONE<span>HANDS</span></h1>
+      <p class="subtitle">Prototipo de control gestual «estilo dron» con dos manos · MediaPipe Hand Landmarker</p>
+      <div class="controls-help">
+        <div class="help-card">
+          <h3>✋ Mano izquierda</h3>
+          <p><b>Altitud:</b> sube y baja la muñeca para elevar o descender el dron.</p>
+          <p><b>Puño cerrado:</b> bloquea la altitud (hover).</p>
+        </div>
+        <div class="help-card">
+          <h3>🫱 Mano derecha</h3>
+          <p><b>Dirección:</b> apunta los dedos a la derecha para acelerar; hacia arriba = hover; hacia la izquierda = retroceso.</p>
+          <p><b>Palma vertical:</b> gírala como un manillar para desplazarte lateralmente.</p>
+          <p><b>Pinza (índice+pulgar):</b> TURBO · puntos x2.</p>
+        </div>
+      </div>
+      <div class="options">
+        <div class="segmented" id="diff-seg">
+          <button data-diff="easy">Fácil</button>
+          <button data-diff="normal" class="active">Normal</button>
+          <button data-diff="hard">Difícil</button>
+        </div>
+        <label class="checkbox"><input type="checkbox" id="opt-invert" /> Intercambiar manos L/R</label>
+      </div>
+      <button id="btn-start" class="btn-primary">▶ INICIAR VUELO</button>
+      <p class="note">Consejo: si tu mano izquierda no responde, activa «Intercambiar manos L/R». Requiere HTTPS y permiso de cámara.</p>
+    </div>
+
+    <div id="scr-error" class="panel hidden">
+      <h2>⚠️ No se pudo iniciar</h2>
+      <p id="error-msg">…</p>
+      <button id="btn-keyboard" class="btn-secondary">⌨️ Continuar en modo teclado</button>
+    </div>
+
+    <div id="scr-pause" class="panel hidden">
+      <h2>⏸ PAUSA</h2>
+      <p>El dron espera tus órdenes.</p>
+      <button id="btn-resume" class="btn-primary">▶ Reanudar</button>
+    </div>
+
+    <div id="scr-handslost" class="panel hidden">
+      <h2>👋 Manos no detectadas</h2>
+      <p>Muestra ambas manos frente a la cámara para continuar.<br />(Puedes seguir con el teclado: flechas + espacio)</p>
+    </div>
+
+    <div id="scr-gameover" class="panel hidden">
+      <h2>💥 DRON DERIBADO</h2>
+      <div class="stats">
+        <div><span class="hud-label">PUNTOS</span><span id="go-score" class="big accent">0</span></div>
+        <div><span class="hud-label">PUERTAS</span><span id="go-gates" class="big">0</span></div>
+        <div><span class="hud-label">RÉCORD</span><span id="go-best" class="big">0</span></div>
+      </div>
+      <p id="go-newbest" class="newbest hidden">🏆 ¡NUEVO RÉCORD!</p>
+      <p class="tip">Mantén la <b>pinza derecha</b> cerrada 1,5 s para reiniciar… <span id="go-pinch-progress">◦◦◦</span></p>
+      <button id="btn-retry" class="btn-primary">↻ Reintentar</button>
+    </div>
+  </section>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Vercel
+.vercel/
+
+# Node
+node_modules/
+
+# Sistema operativo / editor
+.DS_Store
+Thumbs.db
+.vscode/

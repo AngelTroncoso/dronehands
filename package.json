@@ -1,0 +1,10 @@
+{
+  "name": "drone-hands-iot-prototype",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Prototipo IoT: videojuego controlado con dos manos vía MediaPipe Hand Landmarker. Sitio estático listo para Vercel.",
+  "scripts": {
+    "dev": "npx -y serve -l 3000 .",
+    "deploy": "vercel --prod"
+  }
+}
