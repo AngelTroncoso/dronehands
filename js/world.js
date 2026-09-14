@@ -1,9 +1,13 @@
 /* =========================================================
    DRONE HANDS · Mundo del juego (canvas 2D)
-   Puertas con hueco, anillos, chips IoT, partículas, parallax
+   Tema «Food Delivery»: restaurantes con pedidos, zonas de entrega,
+   puertas con hueco, anillos, partículas, parallax
    ========================================================= */
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (a, b) => a + Math.random() * (b - a);
+
+/* Carta de comida: cada pedido es un plato de un restaurante */
+const FOOD = ["🍔", "🍕", "🍜", "🌮", "🍣", "🥗", "🍩", "☕"];
 
 export class World {
   constructor(canvas) {
@@ -17,6 +21,8 @@ export class World {
     this.chips = [];
     this.parts = [];
     this.rings = [];
+    this.orders = [];      // pedidos recogibles (restaurantes)
+    this.drops = [];       // zonas de entrega activas
     this.stars = [];
     this.skyline = [];
     this.gateDist = 0;    // píxeles hasta la siguiente puerta
@@ -65,6 +71,8 @@ export class World {
     this.gates = [];
     this.chips = [];
     this.rings = [];
+    this.orders = [];
+    this.drops = [];
     this.parts = [];
     this.gateDist = 260;
     this.gateCount = 0;
@@ -83,8 +91,12 @@ export class World {
       this.gateDist = clamp(300 - this.gateCount * 1.2, 200, 300) + rnd(-30, 40);
       const gapY = rnd(this.H * .22, this.H * .78);
       this.gates.push({ x: this.W + 60, gapY, w: this.gateW, passed: false, warn: 0, id: this.gateCount++ });
-      if (Math.random() < .35) {
-        this.chips.push({ x: this.W + 60 + rnd(90, 150), y: rnd(this.H * .18, this.H * .82), taken: false, tw: 0 });
+      if (Math.random() < .5) {
+        /* Restaurante con pedido listo para recoger */
+        this.orders.push({ x: this.W + 60 + rnd(90, 150), y: rnd(this.H * .18, this.H * .82), emoji: FOOD[Math.floor(Math.random() * FOOD.length)], taken: false, tw: 0, scored: false });
+      }
+      if (Math.random() < .3) {
+        this.chips.push({ x: this.W + 60 + rnd(160, 220), y: rnd(this.H * .18, this.H * .82), taken: false, tw: 0 });
       }
       if (Math.random() < .45) {
         this.rings.push({ x: this.W + 60 + rnd(120, 170), y: rnd(this.H * .2, this.H * .8), r: 26, passed: false, tw: 0 });
@@ -113,13 +125,23 @@ export class World {
     }
     this.gates = this.gates.filter(g => !g.dead);
 
-    for (const c of this.chips) {
+    for (const c of this.orders) {
       c.x -= d;
       c.tw += .12;
       if (c.x < -40) c.dead = true;
-      if (!c.taken && Math.hypot(c.x - drone.x, c.y - drone.y) < r + 15) c.taken = true;
+      if (!c.taken && Math.hypot(c.x - drone.x, c.y - drone.y) < r + 20) c.taken = true;
     }
-    this.chips = this.chips.filter(c => !c.dead);
+    this.orders = this.orders.filter(c => !c.dead);
+
+    for (const z of this.drops) {
+      z.x -= d;
+      z.tw += .1;
+      if (z.x < -60) z.dead = true;
+      if (!z.done && Math.hypot(z.x - drone.x, z.y - drone.y) < r + 26) z.done = true;
+    }
+    this.drops = this.drops.filter(z => !z.dead);
+
+    /* Los chips se mantienen como batería ⚡ (recarga de puntos) */
 
     for (const ring of this.rings) {
       ring.x -= d;
@@ -148,12 +170,19 @@ export class World {
     }
   }
 
+  /** Activa una zona de entrega para el pedido recogido */
+  spawnDrop(emoji) {
+    this.drops.push({ x: this.W + 80, y: rnd(this.H * .25, this.H * .75), emoji, done: false, tw: 0, scored: false });
+  }
+
   draw() {
     const ctx = this.ctx;
     this.drawBackground(ctx);
     this.drawRings(ctx);
     this.drawGates(ctx);
     this.drawChips(ctx);
+    this.drawOrders(ctx);
+    this.drawDrops(ctx);
     this.drawParts(ctx);
   }
 
@@ -298,6 +327,73 @@ export class World {
       ctx.fillRect(-4, -4, 8, 8);
       ctx.restore();
       ctx.shadowBlur = 0;
+    }
+  }
+
+  /** Restaurante con pedido flotando (recogida) */
+  drawOrders(ctx) {
+    for (const o of this.orders) {
+      if (o.taken) continue;
+      const bob = Math.sin(o.tw) * 3;
+      /* Letrero del restaurante */
+      ctx.save();
+      ctx.shadowColor = "#ff6b6b";
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = "rgba(255, 107, 107, .16)";
+      ctx.strokeStyle = "rgba(255, 107, 107, .9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(o.x - 18, o.y - 34 + bob, 36, 24);
+      ctx.fill(); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.font = "700 15px Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("🏠", o.x, o.y - 16 + bob);
+      /* Pedido colgando con cuerda */
+      ctx.strokeStyle = "rgba(255,255,255,.45)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(o.x, o.y - 10 + bob);
+      ctx.lineTo(o.x, o.y + 8 + bob);
+      ctx.stroke();
+      ctx.font = "700 22px Consolas, monospace";
+      ctx.shadowColor = "#ffd166";
+      ctx.shadowBlur = 16;
+      ctx.fillText(o.emoji, o.x, o.y + 28 + bob);
+      ctx.restore();
+    }
+  }
+
+  /** Zona de entrega: círculo objetivo brillante */
+  drawDrops(ctx) {
+    for (const z of this.drops) {
+      if (z.done) continue;
+      const pulse = 1 + .12 * Math.sin(z.tw * 2);
+      const col = "#3ddc84";
+      ctx.save();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2.6;
+      ctx.globalAlpha = .75;
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 18;
+      ctx.beginPath();
+      ctx.arc(z.x, z.y, 26 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([5, 7]);
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(z.x, z.y, 38 * pulse, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.font = "700 12px Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillStyle = col;
+      ctx.fillText("ENTREGA ⬇", z.x, z.y - 46);
+      ctx.font = "700 20px Consolas, monospace";
+      ctx.fillText("🚩", z.x, z.y + 6);
+      ctx.restore();
     }
   }
 

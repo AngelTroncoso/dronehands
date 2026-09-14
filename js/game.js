@@ -95,7 +95,9 @@ const app = {
   time: 0,
   countT: 0,
   handsSeenT: 0,
-  pinchHold: 0
+  pinchHold: 0,
+  order: null,        // pedido en curso { emoji, t, maxT }
+  deliveries: 0       // entregas completadas
 };
 
 const drone = { x: 0, y: 0, vx: 0, vy: 0, alt: 0, spd: 0, tilt: 0, turbo: 0, alive: true, rot: 0 };
@@ -165,16 +167,27 @@ function updateHud() {
   const segs = document.querySelectorAll("#hud-hull .seg");
   for (let i = 0; i < segs.length; i++) segs[i].classList.toggle("lost", i >= app.lives);
   document.getElementById("hud-hull").classList.toggle("low", app.lives === 1);
+
+  /* Panel de pedido en curso */
+  const ordEl = $("#hud-order");
+  if (app.order) {
+    ordEl.classList.remove("hidden");
+    $("#hud-order-emoji").textContent = app.order.emoji;
+    const w = clamp(app.order.t / app.order.maxT, 0, 1);
+    $("#hud-order-bar").style.width = (w * 100) + "%";
+    $("#hud-order-bar").classList.toggle("cold", w < .35);
+    $("#hud-order-tip").textContent = "+" + Math.round(20 + 60 * w) + (app.order.express ? " ×2" : "");
+  } else ordEl.classList.add("hidden");
 }
 
 function updateGesturePanel() {
   if (app.keyboardOnly) return;
   const L = hands.left, R = hands.right;
   $("#g-left-bar").style.height = (50 - clamp(L.alt, -1, 1) * 48) + "%";
-  $("#g-left-status").textContent = L.present ? (L.fist > .5 ? "puño · hover" : "alt " + L.alt.toFixed(2)) : "sin mano";
+  $("#g-left-status").textContent = L.present ? (L.fist > .5 ? "puño · hover" : (L.alt < -0.1 ? "SUBIENDO ⬆" : L.alt > 0.1 ? "BAJANDO ⬇" : "alt " + L.alt.toFixed(2))) : "sin mano";
   $("#g-left").classList.toggle("active", L.present);
   $("#g-right-bar").style.width = (50 + clamp(R.dir, -1, 1) * 48) + "%";
-  $("#g-right-status").textContent = R.present ? (R.pinch > .5 ? "TURBO " + R.dir.toFixed(2) : "dir " + R.dir.toFixed(2)) : "sin mano";
+  $("#g-right-status").textContent = R.present ? (R.turbo > .5 ? "✌️ TURBO ×2" : R.palm > .5 ? "🖐 FRENO" : R.pinch > .5 ? "🤏 pinza · pedido" : "dir " + R.dir.toFixed(2)) : "sin mano";
   $("#g-right").classList.toggle("active", R.present);
   $("#g-fps").textContent = Math.round(fps.v) + " fps · " + hands.backend;
   const nHands = (L.present ? 1 : 0) + (R.present ? 1 : 0);
@@ -200,6 +213,8 @@ function resetRun() {
   app.recordHit = false;
   app.lastTurbo = false;
   app.lastCount = 0;
+  app.order = null;
+  app.deliveries = 0;
   $("#hud-score").classList.remove("flash-record");
   $("#go-retry-fill").style.width = "0%";
   drone.x = Math.max(170, world.W * 0.24);
@@ -252,7 +267,7 @@ function gameOver() {
   const goTarget = app.score; const goEl = $("#go-score"); const goT0 = performance.now();
   const goTick = () => { const p = Math.min(1, (performance.now() - goT0) / 1200); goEl.textContent = Math.round(goTarget * p * (2 - p)); if (p < 1) requestAnimationFrame(goTick); };
   goTick();
-  $("#go-gates").textContent = app.gates;
+  $("#go-gates").textContent = app.deliveries;
   $("#go-best").textContent = app.best;
   $("#go-newbest").classList.toggle("hidden", !isNew);
   setGameState(S.GAMEOVER);
@@ -287,9 +302,12 @@ function readControls(dt) {
     if (R.present) {
       dir = R.dir;
       side = R.side * 0.8;
+      /* AEROFRENO: palma abierta = reducir marcha */
+      if (R.palm > 0.5) dir = Math.min(dir, -0.7);
       if (Math.abs(dir) < 0.05) dir = 0;
       if (Math.abs(side) < 0.05) side = 0;
-      turbo = R.pinch > 0.55 ? 1 : 0;
+      /* TURBO ✌️: índice + corazón extendidos (la pinza 🤏 ahora recoge pedidos) */
+      turbo = R.turbo > 0.5 ? 1 : 0;
     }
   }
 
@@ -355,6 +373,46 @@ function scoring(dt) {
       app.score += 5 * (drone.turbo > 0.5 ? 2 : 1);
       sfx.blip(760, 1200, .08, "sine", .1);
       world.burst(c.x, c.y, "#3ddc84", 10, 2.5);
+    }
+  }
+  /* --- Pedidos: recoger en el restaurante, entregar en la zona marcada --- */
+  for (const o of world.orders) {
+    if (o.taken && !o.scored) {
+      o.scored = true;
+      /* Recogida exprés con pinza 🤏 = propina x2 */
+      const express = !app.keyboardOnly && hands.right.present && hands.right.pinch > 0.55;
+      app.order = { emoji: o.emoji, t: 22, maxT: 22, express };
+      sfx.blip(660, 990, .14, "sine", .14);
+      world.burst(o.x, o.y, "#ffd166", 18, 3.5);
+      announce(o.emoji + (express ? " ¡PEDIDO RECOGIDO! · x2" : " ¡PEDIDO RECOGIDO!"), "", 1400);
+      world.spawnDrop(o.emoji);
+    }
+  }
+  for (const z of world.drops) {
+    if (z.done && !z.scored) {
+      z.scored = true;
+      if (app.order) {
+        app.deliveries++;
+        const warmth = clamp(app.order.t / app.order.maxT, 0, 1);
+        const tip = Math.round(20 + 60 * warmth) * (app.order.express ? 2 : 1);
+        app.score += tip;
+        app.order = null;
+        app.combo = Math.min(5, app.combo + 1);
+        app.comboTimer = 4;
+        sfx.blip(520, 1200, .2, "sine", .14);
+        world.burst(z.x, z.y, "#3ddc84", 24, 4);
+        announce("🚀 " + z.emoji + " ENTREGADO · +" + tip + " propina", "record", 1600);
+      }
+    }
+  }
+  if (app.order) {
+    app.order.t -= dt;
+    if (app.order.t <= 0) {
+      /* La comida llegó fría: pedido cancelado */
+      app.order = null;
+      app.combo = 1;
+      announce("❄️ ¡PEDIDO FRÍO! Cancelado", "danger", 1500);
+      sfx.crash();
     }
   }
   for (const r of world.rings) {
@@ -444,6 +502,23 @@ function drawDrone(ctx) {
   ctx.moveTo(-11, 9); ctx.lineTo(11, 9);
   ctx.moveTo(0, 8); ctx.lineTo(0, 12);
   ctx.stroke();
+
+  /* Paquete colgando cuando llevamos un pedido */
+  if (app.order) {
+    const swing = Math.sin(app.time * 4) * 2;
+    ctx.strokeStyle = "rgba(255, 255, 255, .55)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 12);
+    ctx.quadraticCurveTo(swing, 18, swing, 22);
+    ctx.stroke();
+    ctx.font = "700 18px Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "#ffd166";
+    ctx.shadowBlur = 10;
+    ctx.fillText(app.order.emoji, swing, 34);
+    ctx.shadowBlur = 0;
+  }
   ctx.restore();
 }
 

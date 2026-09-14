@@ -39,6 +39,9 @@ export class HandController {
       alt: 0,
       pinch: 0,        // 0 abierta .. 1 cerrada (pinza índice-pulgar)
       fist: 0,         // 0 mano abierta .. 1 puño
+      fingers: 0,      // número de dedos extendidos (0..5)
+      turbo: 0,        // 1 = índice+corazón extendidos (TURBO ×2)
+      palm: 0,         // 1 = palma abierta (aerofreno)
       dir: 0,          // -1 apunta arriba .. +1 apunta derecha (mano derecha)
       side: 0,         // -1 izquierda .. +1 derecha (orientación de la palma)
       landmarks: null
@@ -145,18 +148,24 @@ export class HandController {
         cur.side = lerp(cur.side, fresh.side, this.smooth);
         cur.pinch = fresh.pinch > 0.6 ? Math.min(1, cur.pinch + dt * 6) : (fresh.pinch < 0.35 ? Math.max(0, cur.pinch - dt * 6) : cur.pinch);
         cur.fist = fresh.fist > 0.6 ? Math.min(1, cur.fist + dt * 6) : (fresh.fist < 0.35 ? Math.max(0, cur.fist - dt * 6) : cur.fist);
+        cur.turbo = fresh.turbo > 0.5 ? Math.min(1, cur.turbo + dt * 8) : Math.max(0, cur.turbo - dt * 8);
+        cur.palm = fresh.palm > 0.5 ? Math.min(1, cur.palm + dt * 8) : Math.max(0, cur.palm - dt * 8);
+        cur.fingers = fresh.fingers;
       } else if (cur.present) {
         /* La mano desapareció: decaer a neutro */
         cur.score = 0;
         cur.landmarks = null;
         cur.pinch = Math.max(0, cur.pinch - dt * 3);
         cur.fist = Math.max(0, cur.fist - dt * 3);
+        cur.turbo = Math.max(0, cur.turbo - dt * 3);
+        cur.palm = Math.max(0, cur.palm - dt * 3);
+        cur.fingers = 0;
         cur.dir = this.decay(cur.dir, this.release.dir, dt);
         cur.side = this.decay(cur.side, this.release.side, dt);
         if (Math.abs(cur.altRaw) < 0.04) cur.altRaw = 0; else cur.altRaw = this.decay(cur.altRaw, this.release.alt, dt);
         if (Math.abs(cur.alt) < 0.04) cur.alt = 0; else cur.alt = this.decay(cur.alt, this.release.alt, dt);
         if (Math.abs(cur.dir) < 0.03 && Math.abs(cur.side) < 0.03 && Math.abs(cur.alt) < 0.02 &&
-            cur.pinch === 0 && cur.fist === 0) cur.present = false;
+            cur.pinch === 0 && cur.fist === 0 && cur.turbo === 0 && cur.palm === 0) cur.present = false;
       }
     }
   }
@@ -198,18 +207,27 @@ export class HandController {
     else if (sideDeg >= 90) s = 0;
     st.side = clamp(s, -1, 1);
 
-    /* --- Pinza índice-pulgar (TURBO) --- */
+    /* --- Pinza índice-pulgar (RECOGER / ENTREGAR pedido) --- */
     const Th = lm[TIP.thumb];
     const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y) || 0.1;
     const pinchDist = Math.hypot(Th.x - I.x, Th.y - I.y) / handSize;
     st.pinch = clamp(1 - (pinchDist - 0.35) / 0.5, 0, 1);
 
-    /* --- Puño (hover) --- */
+    /* --- Dedos extendidos: TURBO (2 dedos) y AEROFRENO (palma abierta) --- */
+    let extended = [];
     let folded = 0;
     for (const f of ["index", "middle", "ring", "pinky"]) {
       const tip = lm[TIP[f]], pip = lm[PIP[f]];
       if (Math.hypot(tip.x - W.x, tip.y - W.y) < Math.hypot(pip.x - W.x, pip.y - W.y)) folded++;
+      else extended.push(f);
     }
+    st.fingers = extended.length;
+    /* TURBO: índice + corazón extendidos, anular y meñique plegados (✌️) */
+    st.turbo = (extended.includes("index") && extended.includes("middle") && folded >= 2) ? 1 : 0;
+    /* AEROFRENO: palma abierta (4 dedos extendidos) */
+    st.palm = (extended.length >= 4) ? 1 : 0;
+
+    /* --- Puño (hover) --- */
     st.fist = folded / 4;
   }
 
@@ -239,14 +257,25 @@ export class HandController {
         ctx.fill();
       }
 
-      /* Indicador de pinza TURBO */
+      /* Indicador de pinza (recoger/entregar pedido) */
       if (hand.pinch > 0.35) {
-        ctx.strokeStyle = `rgba(255,77,109,${hand.pinch})`;
+        ctx.strokeStyle = `rgba(61,220,132,${hand.pinch})`;
         ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.moveTo(lm[4].x * w, lm[4].y * h);
         ctx.lineTo(lm[8].x * w, lm[8].y * h);
         ctx.stroke();
+      }
+      /* Indicador TURBO ✌️ */
+      if (hand.turbo > 0.5) {
+        ctx.strokeStyle = "rgba(255,159,28,.95)";
+        ctx.lineWidth = 3;
+        for (const f of [TIP.index, TIP.middle]) {
+          ctx.beginPath();
+          ctx.moveTo(lm[0].x * w, lm[0].y * h);
+          ctx.lineTo(lm[f].x * w, lm[f].y * h);
+          ctx.stroke();
+        }
       }
     }
   }
