@@ -38,6 +38,7 @@ export class HandController {
       altRaw: 0,       // -1 arriba .. +1 abajo (mano izquierda)
       alt: 0,
       altPoint: 0,     // -1 apunta arriba .. +1 apunta abajo (señal de apuntado)
+      pointDeg: 0,     // ángulo crudo de apuntado (muñeca -> índice, en grados)
       pinch: 0,        // 0 abierta .. 1 cerrada (pinza índice-pulgar)
       fist: 0,         // 0 mano abierta .. 1 puño
       fingers: 0,      // número de dedos extendidos (0..5)
@@ -56,7 +57,7 @@ export class HandController {
     /* Decaimiento a neutro cuando la mano desaparece */
     this.release = { dir: 2.2, side: 2.0, alt: 2.5 };
 
-    this.calib = { leftCenter: null };
+    this.calib = { leftCenter: null, leftAngle: null, rightAngle: null };
   }
 
   async init(video, onStatus) {
@@ -87,15 +88,21 @@ export class HandController {
     this.swapHands = !!swap;
   }
 
-  /** Centro de altitud capturado en la cuenta atrás (Y normalizada de la muñeca izquierda) */
+  /** Centro de altitud + ángulos neutros capturados en la cuenta atrás */
   captureAltCenter() {
-    if (this.left.present) this.calib.leftCenter = this.left.altRaw;
+    if (this.left.present) {
+      this.calib.leftCenter = this.left.altRaw;
+      this.calib.leftAngle = this.left.pointDeg;
+    }
+    if (this.right.present) this.calib.rightAngle = this.right.pointDeg;
   }
   get altCenter() {
     return this.calib.leftCenter;
   }
   clearAltCenter() {
     this.calib.leftCenter = null;
+    this.calib.leftAngle = null;
+    this.calib.rightAngle = null;
   }
 
   /** Procesa el fotograma actual del vídeo */
@@ -146,6 +153,7 @@ export class HandController {
         cur.altRaw = lerp(cur.altRaw, fresh.altRaw, this.smooth);
         cur.alt = lerp(cur.alt, fresh.alt, this.smooth);
         cur.altPoint = lerp(cur.altPoint, fresh.altPoint, this.smooth);
+        cur.pointDeg = lerp(cur.pointDeg, fresh.pointDeg, this.smooth);
         cur.dir = lerp(cur.dir, fresh.dir, this.smooth);
         cur.side = lerp(cur.side, fresh.side, this.smooth);
         cur.pinch = fresh.pinch > 0.6 ? Math.min(1, cur.pinch + dt * 6) : (fresh.pinch < 0.35 ? Math.max(0, cur.pinch - dt * 6) : cur.pinch);
@@ -167,6 +175,7 @@ export class HandController {
         if (Math.abs(cur.altRaw) < 0.04) cur.altRaw = 0; else cur.altRaw = this.decay(cur.altRaw, this.release.alt, dt);
         if (Math.abs(cur.alt) < 0.04) cur.alt = 0; else cur.alt = this.decay(cur.alt, this.release.alt, dt);
         cur.altPoint = this.decay(cur.altPoint, 2.5, dt);
+        if (Math.abs(cur.pointDeg) < 1) cur.pointDeg = 0; else cur.pointDeg = this.decay(cur.pointDeg, 60, dt);
         if (Math.abs(cur.dir) < 0.03 && Math.abs(cur.side) < 0.03 && Math.abs(cur.alt) < 0.02 &&
             cur.pinch === 0 && cur.fist === 0 && cur.turbo === 0 && cur.palm === 0) cur.present = false;
       }
@@ -201,6 +210,7 @@ export class HandController {
     let altPoint = 0;
     if (degL >= 25) altPoint = clamp((degL - 25) / 45, 0, 1);          // apunta abajo -> +1 (BAJAR)
     else if (degL <= -25) altPoint = clamp((degL + 25) / 45, -1, 0);   // apunta arriba -> -1 (SUBIR)
+    st.pointDeg = degL;
 
     st.alt = Math.abs(altPoint) > Math.abs(altWrist) ? altPoint : altWrist;
     st.altPoint = altPoint;   // señal pura de apuntado (para combinar en el juego)
@@ -216,6 +226,7 @@ export class HandController {
       if (deg >= 106) d = (deg - 106) / 74 * -0.6;         // muy a la izquierda -> retroceso
     }
     st.dir = clamp(d, -1, 1);
+    st.pointDeg = deg;
 
     /* --- Orientación de la palma (muñeca -> nudillo medio) = manillar lateral --- */
     const M = lm[9];

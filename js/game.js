@@ -184,10 +184,10 @@ function updateGesturePanel() {
   if (app.keyboardOnly) return;
   const L = hands.left, R = hands.right;
   $("#g-left-bar").style.height = (50 - clamp(L.alt, -1, 1) * 48) + "%";
-  $("#g-left-status").textContent = L.present ? (L.fist > .5 ? "puño · hover" : (L.alt < -0.1 ? "SUBIENDO ⬆" : L.alt > 0.1 ? "BAJANDO ⬇" : "alt " + L.alt.toFixed(2))) : "sin mano";
+  $("#g-left-status").textContent = L.present ? (L.fist > .5 ? "puño · hover" : (L.alt < -0.1 ? "SUBIENDO ⬆" : L.alt > 0.1 ? "BAJANDO ⬇" : "alt " + L.alt.toFixed(2)) + " · ∠" + Math.round(L.pointDeg) + "°") : "sin mano";
   $("#g-left").classList.toggle("active", L.present);
   $("#g-right-bar").style.width = (50 + clamp(R.dir, -1, 1) * 48) + "%";
-  $("#g-right-status").textContent = R.present ? (R.turbo > .5 ? "✌️ TURBO ×2" : R.palm > .5 ? "🖐 FRENO" : R.pinch > .5 ? "🤏 pinza · pedido" : "dir " + R.dir.toFixed(2)) : "sin mano";
+  $("#g-right-status").textContent = R.present ? (R.turbo > .5 ? "✌️ TURBO ×2" : R.palm > .5 ? "🖐 FRENO" : R.pinch > .5 ? "🤏 pinza · pedido" : (R.dir > 0.05 ? "ACELERANDO ⏭" : "dir " + R.dir.toFixed(2)) + " · ∠" + Math.round(R.pointDeg) + "°") : "sin mano";
   $("#g-right").classList.toggle("active", R.present);
   $("#g-fps").textContent = Math.round(fps.v) + " fps · " + hands.backend;
   const nHands = (L.present ? 1 : 0) + (R.present ? 1 : 0);
@@ -293,6 +293,14 @@ function gameOver() {
 function readControls(dt) {
   const d = DIFF[app.diff] || DIFF.normal;
   let alt = 0, dir = 0, side = 0, turbo = 0, hover = 0;
+  /* Normaliza un delta de ángulo a [-180, 180] */
+  const wrap180 = (a) => ((a + 180) % 360 + 360) % 360 - 180;
+  /* Mapeo de apuntado relativo al neutro calibrado: ±25° zona muerta, pleno a 70° */
+  const pointSignal = (rel) => {
+    if (rel >= 25) return clamp((rel - 25) / 45, 0, 1);       // apunta abajo -> BAJAR
+    if (rel <= -25) return clamp((rel + 25) / 45, -1, 0);     // apunta arriba -> SUBIR
+    return 0;
+  };
 
   if (app.keyboardOnly || app.keyboardMode) {
     alt = (KEY.down ? 1 : 0) - (KEY.up ? 1 : 0);
@@ -302,23 +310,31 @@ function readControls(dt) {
     hover = 0;
   } else {
     const L = hands.left, R = hands.right;
-    /* Mano izquierda -> altitud (posición de la muñeca O apuntar arriba/abajo) */
+    /* Mano izquierda -> altitud (posición de la muñeca O apuntar arriba/abajo,
+       ambos RELATIVOS a la pose capturada en la calibración) */
     if (L.present) {
       if (L.fist > 0.5) hover = 1;
       else {
         const c = hands.altCenter ?? 0;
         const span = 0.38;
-        /* Gana la señal de mayor magnitud: muñeca izquierda, apuntar izquierda
-           (arriba/abajo) o apuntar ABAJO con la derecha */
         const wrist = clamp((L.altRaw - c) / span, -1, 1);
-        const cand = Math.abs(L.altPoint) > Math.abs(wrist) ? L.altPoint : wrist;
-        alt = Math.abs(R.altPoint) > Math.abs(cand) ? R.altPoint : cand;
+        const neutralL = hands.calib.leftAngle ?? 0;
+        const pointL = pointSignal(wrap180(L.pointDeg - neutralL));
+        /* Gana la señal de mayor magnitud: muñeca o apuntado izquierdo */
+        alt = Math.abs(pointL) > Math.abs(wrist) ? pointL : wrist;
         if (Math.abs(alt) < 0.08) alt = 0;
       }
     }
-    /* Mano derecha -> dirección (ángulo muñeca->índice) + palma lateral */
+    /* Mano derecha -> dirección y descenso, RELATIVOS a su neutro calibrado */
     if (R.present) {
-      dir = R.dir;
+      const neutralR = hands.calib.rightAngle ?? 0;
+      const rel = wrap180(R.pointDeg - neutralR);
+      if (rel > -20 && rel < 55) dir = rel / 55;                        // apunta al frente -> acelerar
+      else if (rel >= 55) {                                             // apunta abajo -> BAJAR
+        const pointR = clamp((rel - 55) / 30, 0, 1);
+        if (pointR > Math.abs(alt)) alt = pointR;
+        if (rel >= 106) dir = (rel - 106) / 74 * -0.6;                  // muy a la izquierda -> retroceso
+      }
       side = R.side * 0.8;
       /* AEROFRENO: palma abierta = reducir marcha */
       if (R.palm > 0.5) dir = Math.min(dir, -0.7);
