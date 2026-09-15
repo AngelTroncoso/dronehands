@@ -79,6 +79,29 @@ button { font-family: inherit; }
 .hud-btn:hover { border-color: var(--accent); color: var(--accent); }
 .hud-btn small { color: var(--dim); }
 
+/* ---- HUD de gestos en vivo ---- */
+#gesture-hud { position: fixed; top: 78px; left: 50%; transform: translateX(-50%);
+  z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.gh-row { display: flex; gap: 6px; transition: opacity .3s; }
+.gh-row.dim { opacity: .28; }
+.gh-pill { display: flex; align-items: center; gap: 5px; font-size: 15px;
+  background: var(--panel); border: 1px solid rgba(255, 255, 255, .09); border-radius: 20px;
+  padding: 4px 12px 4px 9px; backdrop-filter: blur(6px);
+  color: var(--dim); opacity: .55; transition: all .18s; filter: grayscale(.7); }
+.gh-pill small { font-size: 9px; letter-spacing: 1.5px; font-family: var(--mono); }
+.gh-pill.on { opacity: 1; filter: none; transform: scale(1.08); color: var(--text); }
+#gh-left .gh-pill.on { border-color: rgba(0, 229, 255, .8); box-shadow: 0 0 16px rgba(0, 229, 255, .45);
+  background: rgba(0, 229, 255, .12); }
+#gh-right .gh-pill.on { border-color: rgba(255, 209, 102, .8); box-shadow: 0 0 16px rgba(255, 209, 102, .45);
+  background: rgba(255, 209, 102, .12); }
+#gh-turbo.on { border-color: rgba(255, 159, 28, .9) !important; box-shadow: 0 0 20px rgba(255, 159, 28, .6) !important;
+  background: rgba(255, 159, 28, .16) !important; }
+@media (max-width: 760px) {
+  #gesture-hud { top: 64px; }
+  .gh-pill small { display: none; }
+  .gh-pill { padding: 4px 8px; font-size: 13px; }
+}
+
 /* ---- Panel de gestos ---- */
 #gesture-panel { position: fixed; right: 12px; top: 74px; z-index: 6; display: flex;
   flex-direction: column; gap: 8px; width: 190px; }

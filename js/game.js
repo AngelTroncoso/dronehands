@@ -192,6 +192,20 @@ function updateGesturePanel() {
   $("#g-fps").textContent = Math.round(fps.v) + " fps · " + hands.backend;
   const nHands = (L.present ? 1 : 0) + (R.present ? 1 : 0);
   $("#g-hands").textContent = nHands + "/2 manos";
+
+  /* HUD de gestos en vivo */
+  const up = $("#gh-up"), down = $("#gh-down"), hov = $("#gh-hover");
+  if (up) {
+    up.classList.toggle("on", L.present && L.fist <= .5 && L.alt < -0.1);
+    down.classList.toggle("on", L.present && L.fist <= .5 && L.alt > 0.1);
+    hov.classList.toggle("on", L.present && L.fist > .5);
+    cruise.classList.toggle("on", R.present && R.turbo <= .5 && R.palm <= .5 && R.pinch <= .55 && R.altPoint <= .3);
+    turbo.classList.toggle("on", R.present && R.turbo > .5);
+    brake.classList.toggle("on", R.present && R.palm > .5);
+    pinch.classList.toggle("on", R.present && R.pinch > .55);
+    $("#gh-left").classList.toggle("dim", !L.present);
+    $("#gh-right").classList.toggle("dim", !R.present);
+  }
   const wrap = document.getElementById("cam-wrap");
   wrap.classList.toggle("hands-0", nHands === 0);
   wrap.classList.toggle("hands-1", nHands === 1);
@@ -288,14 +302,18 @@ function readControls(dt) {
     hover = 0;
   } else {
     const L = hands.left, R = hands.right;
-    /* Mano izquierda -> altitud (Y de la muñeca, relativa al centro capturado) */
+    /* Mano izquierda -> altitud (posición de la muñeca O apuntar arriba/abajo) */
     if (L.present) {
       if (L.fist > 0.5) hover = 1;
       else {
         const c = hands.altCenter ?? 0;
         const span = 0.38;
-        alt = clamp((L.altRaw - c) / span, -1, 1);
-        if (Math.abs(alt) < 0.06) alt = 0;
+        /* Gana la señal de mayor magnitud: muñeca izquierda, apuntar izquierda
+           (arriba/abajo) o apuntar ABAJO con la derecha */
+        const wrist = clamp((L.altRaw - c) / span, -1, 1);
+        const cand = Math.abs(L.altPoint) > Math.abs(wrist) ? L.altPoint : wrist;
+        alt = Math.abs(R.altPoint) > Math.abs(cand) ? R.altPoint : cand;
+        if (Math.abs(alt) < 0.08) alt = 0;
       }
     }
     /* Mano derecha -> dirección (ángulo muñeca->índice) + palma lateral */

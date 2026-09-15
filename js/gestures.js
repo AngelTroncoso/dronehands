@@ -37,6 +37,7 @@ export class HandController {
       score: 0,
       altRaw: 0,       // -1 arriba .. +1 abajo (mano izquierda)
       alt: 0,
+      altPoint: 0,     // -1 apunta arriba .. +1 apunta abajo (señal de apuntado)
       pinch: 0,        // 0 abierta .. 1 cerrada (pinza índice-pulgar)
       fist: 0,         // 0 mano abierta .. 1 puño
       fingers: 0,      // número de dedos extendidos (0..5)
@@ -144,6 +145,7 @@ export class HandController {
         /* EMA hacia el nuevo valor */
         cur.altRaw = lerp(cur.altRaw, fresh.altRaw, this.smooth);
         cur.alt = lerp(cur.alt, fresh.alt, this.smooth);
+        cur.altPoint = lerp(cur.altPoint, fresh.altPoint, this.smooth);
         cur.dir = lerp(cur.dir, fresh.dir, this.smooth);
         cur.side = lerp(cur.side, fresh.side, this.smooth);
         cur.pinch = fresh.pinch > 0.6 ? Math.min(1, cur.pinch + dt * 6) : (fresh.pinch < 0.35 ? Math.max(0, cur.pinch - dt * 6) : cur.pinch);
@@ -164,6 +166,7 @@ export class HandController {
         cur.side = this.decay(cur.side, this.release.side, dt);
         if (Math.abs(cur.altRaw) < 0.04) cur.altRaw = 0; else cur.altRaw = this.decay(cur.altRaw, this.release.alt, dt);
         if (Math.abs(cur.alt) < 0.04) cur.alt = 0; else cur.alt = this.decay(cur.alt, this.release.alt, dt);
+        cur.altPoint = this.decay(cur.altPoint, 2.5, dt);
         if (Math.abs(cur.dir) < 0.03 && Math.abs(cur.side) < 0.03 && Math.abs(cur.alt) < 0.02 &&
             cur.pinch === 0 && cur.fist === 0 && cur.turbo === 0 && cur.palm === 0) cur.present = false;
       }
@@ -180,20 +183,38 @@ export class HandController {
   extractFeatures(st, lm) {
     const W = lm[0], I = lm[TIP.index];
 
-    /* --- Mano IZQUIERDA · altitud (Y de la muñeca) --- */
+    /* --- Mano IZQUIERDA · altitud ---
+       Dos señales combinadas:
+       1) Posición vertical de la muñeca respecto al centro calibrado.
+       2) Dirección del APUNTADO (ángulo muñeca -> índice):
+          índice hacia arriba = SUBIR, hacia abajo = BAJAR.
+       Se usa la de mayor magnitud, así funciona tanto bajando la mano
+       como simplemente apuntando hacia abajo. */
     st.altRaw = (W.y - 0.5) * 2; // -1 arriba .. +1 abajo
     const span = Math.max(0.18, Math.abs(lm[9].y - W.y) * 2.6);
-    st.alt = clamp(((W.y - 0.5) * 2) / span, -1, 1);
+    const altWrist = clamp(((W.y - 0.5) * 2) / span, -1, 1);
+
+    /* Apuntado: índice hacia ABAJO = BAJAR, hacia ARRIBA = SUBIR.
+       Zona muerta alrededor de la horizontal (±25°), pleno a 70°. */
+    const angL = Math.atan2(I.y - W.y, I.x - W.x);
+    const degL = (angL * 180) / Math.PI;
+    let altPoint = 0;
+    if (degL >= 25) altPoint = clamp((degL - 25) / 45, 0, 1);          // apunta abajo -> +1 (BAJAR)
+    else if (degL <= -25) altPoint = clamp((degL + 25) / 45, -1, 0);   // apunta arriba -> -1 (SUBIR)
+
+    st.alt = Math.abs(altPoint) > Math.abs(altWrist) ? altPoint : altWrist;
+    st.altPoint = altPoint;   // señal pura de apuntado (para combinar en el juego)
 
     /* --- Mano DERECHA · dirección (ángulo muñeca -> índice) --- */
-    const ang = Math.atan2(I.y - W.y, I.x - W.x); // 0 = derecha, -PI/2 = arriba
+    const ang = Math.atan2(I.y - W.y, I.x - W.x); // 0 = derecha, -PI/2 = arriba, +PI/2 = abajo
     const deg = (ang * 180) / Math.PI;
-    /* Zona muerta de 16° alrededor de la vertical (hover) */
     let d = 0;
-    if (deg > -20 && deg < 74) d = deg / 74;              // 0..1 -> acelerar
-    else if (deg >= 74) d = 1;                            // muy abajo -> tope
-    else if (deg >= 106) d = (deg - 106) / 74 * -0.6;     // apuntando izquierda -> retroceso
-    else if (deg >= 90) d = 0;                            // muerta vertical
+    st.altPoint = 0;   // apuntar hacia ABAJO con la derecha también BAJA (señal solo descendente)
+    if (deg > -20 && deg < 55) d = deg / 55;              // 0..1 -> acelerar (apuntar al frente)
+    else if (deg >= 55) {                                  // apunta abajo -> BAJAR
+      st.altPoint = clamp((deg - 55) / 30, 0, 1);
+      if (deg >= 106) d = (deg - 106) / 74 * -0.6;         // muy a la izquierda -> retroceso
+    }
     st.dir = clamp(d, -1, 1);
 
     /* --- Orientación de la palma (muñeca -> nudillo medio) = manillar lateral --- */
