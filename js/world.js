@@ -188,32 +188,32 @@ export class World {
 
   drawBackground(ctx) {
     const g = ctx.createLinearGradient(0, 0, 0, this.H);
-    g.addColorStop(0, "#060a18");
-    g.addColorStop(.55, "#0a1226");
-    g.addColorStop(1, "#0d0a1c");
+    g.addColorStop(0, "#0a1428");
+    g.addColorStop(.55, "#122042");
+    g.addColorStop(1, "#161030");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.W, this.H);
 
     /* Estrellas */
-    ctx.fillStyle = "#9db8ff";
+    ctx.fillStyle = "#c3d4ff";
     for (const s of this.stars) {
       const x = (s.x - this.bgScroll * s.spd) % this.W;
       const xx = x < 0 ? x + this.W : x;
       const tw = .35 + .65 * Math.abs(Math.sin(s.tw + this.bgScroll * .002));
-      ctx.globalAlpha = .5 * tw;
+      ctx.globalAlpha = .8 * tw;
       ctx.fillRect(xx, s.y, s.r, s.r);
     }
     ctx.globalAlpha = 1;
 
     /* Skyline lejano */
     const off = (this.bgScroll * .5) % Math.max(1, this.W * .4);
-    ctx.fillStyle = "#0f1530";
+    ctx.fillStyle = "#182048";
     for (const b of this.skyline) {
       const x = ((b.x - off) % (this.W * 1.4));
       const xx = x < 0 ? x + this.W * 1.4 : x;
       ctx.fillRect(xx, this.H - b.h, b.w, b.h);
     }
-    ctx.fillStyle = "rgba(0, 229, 255, .18)";
+    ctx.fillStyle = "rgba(0, 229, 255, .35)";
     for (const b of this.skyline) {
       const x = ((b.x - off) % (this.W * 1.4));
       const xx = x < 0 ? x + this.W * 1.4 : x;
@@ -223,14 +223,14 @@ export class World {
     }
 
     /* Suelo neón en perspectiva */
-    ctx.strokeStyle = "rgba(0, 229, 255, .16)";
+    ctx.strokeStyle = "rgba(0, 229, 255, .3)";
     ctx.lineWidth = 1;
     const horizon = this.H * .84;
     ctx.beginPath();
     ctx.moveTo(0, horizon);
     ctx.lineTo(this.W, horizon);
     ctx.stroke();
-    ctx.strokeStyle = "rgba(0, 229, 255, .09)";
+    ctx.strokeStyle = "rgba(0, 229, 255, .18)";
     for (let i = 0; i < 16; i++) {
       const t = (i / 15 + (this.bgScroll * .001) % 1) % 1;
       const y = horizon + t * t * (this.H - horizon) + 1;

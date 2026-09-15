@@ -1,13 +1,13 @@
 :root {
-  --bg: #05070f;
-  --panel: rgba(8, 12, 26, .78);
-  --line: rgba(0, 229, 255, .22);
+  --bg: #0a1224;
+  --panel: rgba(13, 20, 42, .85);
+  --line: rgba(0, 229, 255, .3);
   --accent: #00e5ff;
   --accent2: #ffd166;
   --danger: #ff4d6d;
   --ok: #3ddc84;
-  --text: #dfe9ff;
-  --dim: #7f8db0;
+  --text: #f2f7ff;
+  --dim: #a8b6d8;
   --font: "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: Consolas, "Cascadia Mono", monospace;
 }
@@ -16,7 +16,7 @@ html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(-
 button { font-family: inherit; }
 #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
 #vignette { position: fixed; inset: 0; pointer-events: none; z-index: 3;
-  background: radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.55) 100%); }
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,.35) 100%); }
 #vignette::after { content: ""; position: absolute; inset: 0;
   background: repeating-linear-gradient(0deg, rgba(255,255,255,.025) 0 1px, transparent 1px 3px); opacity: .5; }
 .hidden { display: none !important; }
@@ -48,7 +48,7 @@ button { font-family: inherit; }
 .hud-value.flash-record { color: var(--accent2); animation: recFlash .6s steps(2) infinite; }
 @keyframes recFlash { 50% { text-shadow: 0 0 16px rgba(255,209,102,1); } }
 .score-box { border-color: rgba(0, 229, 255, .45); }
-.meter-box .meter { width: 84px; height: 6px; border-radius: 4px; background: rgba(255,255,255,.08);
+.meter-box .meter { width: 84px; height: 6px; border-radius: 4px; background: rgba(255,255,255,.16);
   overflow: hidden; position: relative; }
 .meter.vertical { width: 8px; height: 26px; }
 .meter.vertical .meter-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; }
@@ -138,9 +138,9 @@ button { font-family: inherit; }
 
 /* ---- Pantallas ---- */
 #screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; }
-.panel { background: rgba(6, 10, 22, .72); border: 1px solid var(--line); border-radius: 20px; padding: 24px 34px;
+.panel { background: rgba(10, 16, 34, .8); border: 1px solid var(--line); border-radius: 20px; padding: 24px 34px;
   max-width: 760px; width: calc(100vw - 48px); max-height: calc(100vh - 50px); overflow: auto;
-  text-align: center; backdrop-filter: blur(9px); box-shadow: 0 20px 70px rgba(0,0,0,.6), inset 0 0 60px rgba(0,229,255,.04);
+  text-align: center; backdrop-filter: blur(9px); box-shadow: 0 20px 70px rgba(0,0,0,.5), inset 0 0 60px rgba(0,229,255,.05);
   animation: panelIn .4s cubic-bezier(.2,1.2,.4,1); }
 @keyframes panelIn { from { opacity: 0; transform: translateY(16px) scale(.97); } }
 .panel h1, .panel h2 { font-weight: 800; letter-spacing: 2px; margin-bottom: 10px; }
